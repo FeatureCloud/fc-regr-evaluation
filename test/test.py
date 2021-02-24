@@ -1,74 +1,82 @@
 import unittest
 
-import numpy as np
 import pandas as pd
-from pandas.testing import assert_frame_equal
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import max_error as sklearn_max_error
+from sklearn.metrics import mean_absolute_error as sklearn_mae
+from sklearn.metrics import mean_squared_error as sklearn_mse
+from sklearn.metrics import median_absolute_error as sklearn_medae
+from sklearn.metrics import mean_absolute_percentage_error as sklearn_mape
 
-from app.algo import check, aggregate_confusion_matrices, compute_threshold_conf_matrices, \
-    compute_min_max_score, agg_compute_thresholds, compute_roc_parameters, roc_plot, compute_roc_auc, find_nearest, \
-    create_score_df
+from app.algo import check, compute_local_prediction_error, aggregate_prediction_errors, mae, rmse, max_error, mse, \
+    medae
 
 
-class TestROC(unittest.TestCase):
+class TestRegressionEvaluation(unittest.TestCase):
     def setUp(self):
         y_proba = pd.read_csv("y_proba.csv")
         y_test = pd.read_csv("y_test.csv")
 
-        y_proba1 = y_proba.iloc[:150, :]
-        y_proba2 = y_proba.iloc[150:, :]
+        y_proba1 = pd.read_csv("client1/y_proba.csv")
+        y_proba2 = pd.read_csv("client2/y_proba.csv")
 
-        y_test1 = y_test.iloc[:150, :]
-        y_test2 = y_test.iloc[150:, :]
+        y_test1 = pd.read_csv("client1/y_test.csv")
+        y_test2 = pd.read_csv("client2/y_test.csv")
 
-        y_test, y_proba = check(y_test, y_proba)
-        y_test1, y_proba1 = check(y_test1, y_proba1)
-        y_test2, y_proba2 = check(y_test2, y_proba2)
+        self.y_test, self.y_proba = check(y_test, y_proba)
+        self.y_test1, self.y_proba1 = check(y_test1, y_proba1)
+        self.y_test2, self.y_proba2 = check(y_test2, y_proba2)
 
-        min, max = compute_min_max_score(y_proba)
-        min1, max1 = compute_min_max_score(y_proba1)
-        min2, max2 = compute_min_max_score(y_proba2)
-        self.thresholds_central = agg_compute_thresholds([[min, max]])
-        self.thresholds_global = agg_compute_thresholds([[min1, max1], [min2, max2]])
+        self.pred_errors_central = compute_local_prediction_error(self.y_test, self.y_proba)
 
-        self.confusion_matrices_central = compute_threshold_conf_matrices(y_test, y_proba, self.thresholds_central)
-        confs1 = compute_threshold_conf_matrices(y_test1, y_proba1, self.thresholds_global)
-        confs2 = compute_threshold_conf_matrices(y_test2, y_proba2, self.thresholds_global)
-        self.confusion_matrices_global = aggregate_confusion_matrices([confs1, confs2])
-        idx = find_nearest(self.thresholds_global, 0.5)
-        self.confusion_matrix_global = self.confusion_matrices_global[idx]
-        self.roc_params_central = compute_roc_parameters(self.confusion_matrices_central, self.thresholds_central)
-        self.roc_params_global = compute_roc_parameters(self.confusion_matrices_global, self.thresholds_global)
+        pred_errors1 = compute_local_prediction_error(self.y_test1, self.y_proba1)
+        pred_errors2 = compute_local_prediction_error(self.y_test2, self.y_proba2)
+        self.pred_errors_global = aggregate_prediction_errors([pred_errors1, pred_errors2])
 
-        plot_central, self.df_central = roc_plot(self.roc_params_central["FPR"], self.roc_params_central["TPR"],
-                                                 self.roc_params_central["THR"])
+    def test_prediction_errors(self):
+        for i in range(len(self.pred_errors_central)):
+            self.assertEqual(self.pred_errors_central[i], self.pred_errors_global[i])
 
-        plot_global, self.df_global = roc_plot(self.roc_params_global["FPR"], self.roc_params_global["TPR"],
-                                               self.roc_params_global["THR"])
+    def test_mae(self):
+        mae_sklearn = sklearn_mae(self.y_test, self.y_proba)
+        print(mae_sklearn)
+        mae_central = mae(self.pred_errors_central)
+        mae_global = mae(self.pred_errors_global)
+        print(mae_global)
 
+        self.assertEqual(mae_sklearn, mae_central)
+        self.assertEqual(mae_central, mae_global)
 
-        self.auc_central = roc_auc_score(y_test, y_proba)
-        self.auc_global = compute_roc_auc(self.roc_params_global["FPR"], self.roc_params_global["TPR"])
-        df_scores = create_score_df(self.confusion_matrix_global, self.auc_global)
+    def test_rmse(self):
+        rmse_sklearn = sklearn_mse(self.y_test, self.y_proba, squared=False)
+        rmse_central = rmse(self.pred_errors_central)
+        rmse_global = rmse(self.pred_errors_global)
 
-    def test_thresholds(self):
-        for i in range(len(self.thresholds_central)):
-            self.assertEqual(self.thresholds_central[i], self.thresholds_global[i])
+        self.assertEqual(rmse_sklearn, rmse_central)
+        self.assertEqual(rmse_central, rmse_global)
 
-    def test_confs(self):
-        for i in range(len(self.confusion_matrices_central)):
-            self.assertDictEqual(self.confusion_matrices_central[i], self.confusion_matrices_global[i])
+    def test_mse(self):
+        mse_sklearn = sklearn_mse(self.y_test, self.y_proba, squared=True)
+        mse_central = mse(self.pred_errors_central)
+        mse_global = mse(self.pred_errors_global)
 
-    def test_roc_params(self):
-        for key in self.roc_params_central.keys():
-            for i in range(len(self.roc_params_central[key])):
-                self.assertEqual(self.roc_params_central[key][i], self.roc_params_global[key][i])
+        self.assertEqual(mse_sklearn, mse_central)
+        self.assertEqual(mse_central, mse_global)
 
-    def test_frames(self):
-        assert_frame_equal(self.df_central, self.df_global)
+    def test_max_error(self):
+        max_error_sklearn = sklearn_max_error(self.y_test, self.y_proba)
+        max_error_central = max_error(self.pred_errors_central)
+        max_error_global = max_error(self.pred_errors_global)
 
-    def test_auc(self):
-        self.assertEqual(self.auc_global, self.auc_central)
+        self.assertEqual(max_error_sklearn, max_error_central)
+        self.assertEqual(max_error_central, max_error_global)
+
+    def test_msle(self):
+        medae_sklearn = sklearn_medae(self.y_test, self.y_proba)
+        medae_central = medae(self.pred_errors_central)
+        medae_global = medae(self.pred_errors_global)
+
+        self.assertEqual(medae_sklearn, medae_central)
+        self.assertEqual(medae_central, medae_global)
 
 
 if __name__ == "__main__":

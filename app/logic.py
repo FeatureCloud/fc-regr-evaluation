@@ -7,8 +7,7 @@ import jsonpickle
 import pandas as pd
 import yaml
 
-from app.algo import roc_plot, check, compute_min_max_score, compute_threshold_conf_matrices, compute_roc_parameters, \
-    agg_compute_thresholds, aggregate_confusion_matrices, create_score_df, find_nearest, compute_roc_auc
+from app.algo import check, create_score_df, aggregate_prediction_errors, compute_local_prediction_error
 
 
 class AppLogic:
@@ -42,16 +41,10 @@ class AppLogic:
 
         self.y_test_filename = None
         self.y_proba_filename = None
-        self.output_format = None
+
         self.y_test = None
         self.y_proba = None
-        self.thresholds = None
-        self.confusion_matrix = None
-        self.confusion_matrices = None
-        self.roc_params = None
-        self.roc_auc = None
-        self.plt = None
-        self.df = None
+        self.global_prediction_errors = None
         self.score_df = None
 
     def handle_setup(self, client_id, coordinator, clients):
@@ -71,10 +64,9 @@ class AppLogic:
 
     def read_config(self):
         with open(self.INPUT_DIR + '/config.yml') as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)['fc_roc']
+            config = yaml.load(f, Loader=yaml.FullLoader)['fc_regr_evaluation']
             self.y_test_filename = config['files']['y_test']
             self.y_proba_filename = config['files']['y_proba']
-            self.output_format = config['files']['output_format']
 
         shutil.copyfile(self.INPUT_DIR + '/config.yml', self.OUTPUT_DIR + '/config.yml')
         print(f'Read config file.', flush=True)
@@ -92,14 +84,11 @@ class AppLogic:
         state_initializing = 1
         state_read_input = 2
         state_preprocess = 3
-        state_aggregate_thresholds = 4
-        state_wait_for_thresholds = 5
-        state_compute_confusion_matrix = 6
-        state_aggregate_confusion_matrices = 7
-        state_wait_for_confusion_matrices = 8
-        state_compute_roc = 9
-        state_writing_results = 10
-        state_finishing = 11
+        state_aggregate_prediction_errors = 4
+        state_wait_for_prediction_errors = 5
+        state_compute_scores = 6
+        state_writing_results = 7
+        state_finishing = 8
 
         # Initial state
         state = state_initializing
@@ -135,67 +124,36 @@ class AppLogic:
 
             if state == state_preprocess:
                 self.y_test, self.y_proba = check(self.y_test, self.y_proba)
-                min_score, max_score = compute_min_max_score(self.y_proba)
+                pred_errors = compute_local_prediction_error(self.y_test, self.y_proba)
 
-                data_to_send = jsonpickle.encode([min_score, max_score])
-
-                if self.coordinator:
-                    self.data_incoming.append(data_to_send)
-                    state = state_aggregate_thresholds
-                else:
-                    self.data_outgoing = data_to_send
-                    self.status_available = True
-                    state = state_wait_for_thresholds
-                    print(f'[CLIENT] Sending computation data to coordinator', flush=True)
-
-            if state == state_wait_for_thresholds:
-                print("[CLIENT] Wait for thresholds")
-                self.progress = 'wait for thresholds'
-                if len(self.data_incoming) > 0:
-                    print("[CLIENT] Received aggregated thresholds from coordinator.")
-                    self.thresholds = jsonpickle.decode(self.data_incoming[0])
-                    self.data_incoming = []
-
-                    state = state_compute_confusion_matrix
-
-            if state == state_compute_confusion_matrix:
-                confusion_matrix = compute_threshold_conf_matrices(self.y_test, self.y_proba, self.thresholds)
-
-                data_to_send = jsonpickle.encode(confusion_matrix)
+                data_to_send = jsonpickle.encode(pred_errors)
 
                 if self.coordinator:
                     self.data_incoming.append(data_to_send)
-                    state = state_aggregate_confusion_matrices
+                    state = state_aggregate_prediction_errors
                 else:
                     self.data_outgoing = data_to_send
                     self.status_available = True
-                    state = state_wait_for_confusion_matrices
+                    state = state_wait_for_prediction_errors
                     print(f'[CLIENT] Sending computation data to coordinator', flush=True)
 
-            if state == state_wait_for_confusion_matrices:
-                print("[CLIENT] Wait for confusion matrix")
-                self.progress = 'wait for confusion matrix'
+            if state == state_wait_for_prediction_errors:
+                print("[CLIENT] Wait for prediction errors")
+                self.progress = 'wait for prediction_errors'
                 if len(self.data_incoming) > 0:
-                    print("[CLIENT] Received aggregated confusion matrix from coordinator.")
-                    self.confusion_matrices = jsonpickle.decode(self.data_incoming[0])
+                    print("[CLIENT] Received aggregated prediction_errors from coordinator.")
+                    self.global_prediction_errors = jsonpickle.decode(self.data_incoming[0])
                     self.data_incoming = []
 
-                    state = state_compute_roc
+                    state = state_compute_scores
 
-            if state == state_compute_roc:
-                print('[CLIENT] Compute roc parameters')
-                self.roc_params = compute_roc_parameters(self.confusion_matrices, self.thresholds)
-                self.roc_auc = compute_roc_auc(self.roc_params["FPR"], self.roc_params["TPR"])
-                idx = find_nearest(self.thresholds, 0.5)
-                self.confusion_matrix = self.confusion_matrices[idx]
-                self.score_df = create_score_df(self.confusion_matrix, self.roc_auc)
+            if state == state_compute_scores:
+                self.score_df = create_score_df(self.global_prediction_errors)
                 state = state_writing_results
 
             if state == state_writing_results:
                 print('[CLIENT] Save results')
-                plt, df = roc_plot(self.roc_params["FPR"], self.roc_params["TPR"], self.roc_params["THR"])
-                plt.savefig(self.OUTPUT_DIR + "/roc." + self.output_format, format=self.output_format)
-                df.to_csv(self.OUTPUT_DIR + "/roc.csv", index=False)
+
                 self.score_df.to_csv(self.OUTPUT_DIR + "/scores.csv", index=False)
                 state = state_finishing
 
@@ -209,31 +167,19 @@ class AppLogic:
 
             # GLOBAL AGGREGATIONS
 
-            if state == state_aggregate_thresholds:
-                print("[CLIENT] Aggregate thresholds")
+            if state == state_aggregate_prediction_errors:
+                print("[CLIENT] Aggregate prediction errors")
                 self.progress = 'computing...'
                 if len(self.data_incoming) == len(self.clients):
                     data = [jsonpickle.decode(client_data) for client_data in self.data_incoming]
+                    print(data)
                     self.data_incoming = []
-                    self.thresholds = agg_compute_thresholds(data)
-                    data_to_broadcast = jsonpickle.encode(self.thresholds)
+                    self.global_prediction_errors = aggregate_prediction_errors(data)
+                    data_to_broadcast = jsonpickle.encode(self.global_prediction_errors)
                     self.data_outgoing = data_to_broadcast
                     self.status_available = True
-                    state = state_compute_confusion_matrix
-                    print(f'[CLIENT] Broadcasting aggregated thresholds to clients', flush=True)
-
-            if state == state_aggregate_confusion_matrices:
-                print("[CLIENT] Aggregate confusion matrices")
-                self.progress = 'computing...'
-                if len(self.data_incoming) == len(self.clients):
-                    data = [jsonpickle.decode(client_data) for client_data in self.data_incoming]
-                    self.data_incoming = []
-                    self.confusion_matrices = aggregate_confusion_matrices(data)
-                    data_to_broadcast = jsonpickle.encode(self.confusion_matrices)
-                    self.data_outgoing = data_to_broadcast
-                    self.status_available = True
-                    state = state_compute_roc
-                    print(f'[CLIENT] Broadcasting aggregated thresholds to clients', flush=True)
+                    state = state_compute_scores
+                    print(f'[CLIENT] Broadcasting aggregated prediction errors to clients', flush=True)
 
             time.sleep(1)
 

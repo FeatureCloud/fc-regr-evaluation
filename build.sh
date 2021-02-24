@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build . --tag registry.featurecloud.eu:5000/fc_roc
+docker build . --tag registry.featurecloud.eu:5000/fc_regr_evaluation
