@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 
 
 def check(y_test, y_proba):
@@ -75,4 +76,26 @@ def create_score_df(pred_errors):
 
     df = pd.DataFrame(list(zip(scores, data)), columns=["metric", "score"])
 
+    return df, data
+
+
+def create_cv_accumulation(maes, maxs, rmses, mses, medaes):
+    scores = [maes, maxs, rmses, mses, medaes]
+    cols = ["mean_absolut_error", "max_error", "root_mean_squared_error", "mean_squared_error",
+            "median_absolut_error"]
+
+    df = pd.DataFrame(data=scores).transpose()
+    df.columns = cols
+
     return df
+
+def plot_boxplots(df, title):
+    fig = go.Figure()
+    fig.add_trace(go.Box(y=df["mean_absolut_error"].map(np.log2), quartilemethod="linear", name="Mean Absolute Error"))
+    fig.add_trace(go.Box(y=df["max_error"].map(np.log2), quartilemethod="linear", name="Max Error"))
+    fig.add_trace(go.Box(y=df["root_mean_squared_error"].map(np.log2), quartilemethod="linear", name="Root Mean Squared Error"))
+    #fig.add_trace(go.Box(y=df["mean_squared_error"].map(np.log2), quartilemethod="linear", name="f1-score"))
+    fig.add_trace(go.Box(y=df["median_absolut_error"].map(np.log2), quartilemethod="linear", name="Median Absolut Error"))
+    fig.update_layout(title=title, yaxis_title='Log2')
+
+    return fig

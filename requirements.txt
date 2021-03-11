@@ -5,3 +5,7 @@ matplotlib
 pandas
 pyyaml
 jsonpickle
+plotly
+psutil
+requests
+kaleido
