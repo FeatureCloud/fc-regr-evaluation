@@ -12,7 +12,7 @@ A Regression Evaluation FeautureCloud app, allowing to evaluate your trained mod
 
 ## Workflows
 Can be combined with the following apps:
-- Pre: Various Analysis apps (e.g. Random Forest, Linear Regression, Logistic Regression, ...)
+- Pre: Various regression apps (e.g. Random Forest, Linear Regression, ...)
 
 ## Config
 Use the config file to customize the evaluation. Just upload it together with your training data as `config.yml`
