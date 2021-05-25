@@ -17,7 +17,7 @@ Can be combined with the following apps:
 ## Config
 Use the config file to customize the evaluation. Just upload it together with your training data as `config.yml`
 ```
-fc_regression_evaluation:
+fc_regr_evaluation:
   input:
     y_true: "test.csv"
     y_pred: "pred.csv"
