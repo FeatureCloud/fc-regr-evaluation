@@ -1,8 +1,6 @@
 FROM python:3.7-slim-stretch
 
-RUN apt-get update
-RUN apt-get upgrade
-RUN apt-get install -y supervisor nginx
+RUN apt-get update && apt-get install -y supervisor nginx gcc
 RUN pip3 install --upgrade pip
 
 COPY requirements.txt /requirements.txt
@@ -13,8 +11,6 @@ COPY server_config/nginx /etc/nginx/sites-available/default
 COPY server_config/docker-entrypoint.sh /entrypoint.sh
 
 COPY . /app
-
-
 
 EXPOSE 9000 9001
 

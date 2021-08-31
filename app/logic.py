@@ -70,7 +70,7 @@ class AppLogic:
 
     def read_config(self):
         with open(self.INPUT_DIR + '/config.yml') as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)['fc_regression_evaluation']
+            config = yaml.load(f, Loader=yaml.FullLoader)['fc_regr_evaluation']
             self.y_test_filename = config['input']['y_true']
             self.y_proba_filename = config['input']['y_pred']
             self.split_mode = config['split']['mode']
@@ -203,7 +203,7 @@ class AppLogic:
                     plt.write_image(f'{self.OUTPUT_DIR}/boxplot.pdf', format="pdf", engine="kaleido")
 
                 if self.coordinator:
-                    self.data_incoming = ['DONE']
+                    self.data_incoming.append('DONE')
                     state = state_finishing
                 else:
                     self.data_outgoing = 'DONE'
