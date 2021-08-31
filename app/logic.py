@@ -192,15 +192,20 @@ class AppLogic:
             if state == state_writing_results:
                 print('[CLIENT] Save results')
                 for split in self.splits.keys():
-                    self.score_dfs[split].to_csv(split.replace("/input/", "/output/") + "/scores.csv", index=False)
+                    self.score_dfs[split].to_csv(split.replace("/input", "/output") + "/scores.csv", index=False)
 
                 if len(self.splits.keys()) > 1:
                     self.cv_averages.to_csv(self.OUTPUT_DIR + "/cv_evaluation.csv", index=False)
 
-                    plt = plot_boxplots(self.cv_averages, title=f'{len(self.splits.keys())}-fold Cross Validation' )
-                    plt.write_image(f'{self.OUTPUT_DIR}/boxplot.png', format="png", engine="kaleido")
-                    plt.write_image(f'{self.OUTPUT_DIR}/boxplot.svg', format="svg", engine="kaleido")
-                    plt.write_image(f'{self.OUTPUT_DIR}/boxplot.pdf', format="pdf", engine="kaleido")
+                    print("[CLIENT] Plot images")
+                    plt = plot_boxplots(self.cv_averages, title=f'{len(self.splits)}-fold Cross Validation')
+
+                    for format in ["png", "svg", "pdf"]:
+                        try:
+                            plt.write_image(self.OUTPUT_DIR + "/boxplot." + format, format=format, engine="kaleido")
+                        except Exception as e:
+                            print("Could not save plot as " + format + ".")
+                            print(e)
 
                 if self.coordinator:
                     self.data_incoming.append('DONE')
