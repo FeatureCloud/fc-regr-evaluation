@@ -1,4 +1,4 @@
-fc_classification_evaluation:
+fc_regr_evaluation:
   input:
     y_true: "y_test.csv"
     y_pred: "y_pred.csv"
@@ -6,4 +6,4 @@ fc_classification_evaluation:
     sep: ","
   split:
     mode: "directory" # or file
-    dir: "data" # or "." for root directory
+    dir: "." # or "." for root directory
