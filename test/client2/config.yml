@@ -1,5 +1,9 @@
 fc_regr_evaluation:
-  files:
-    # supports csv, tsv (pandas dataframes) and pickle (numpy arrays)
-    y_test: "y_test.csv"
-    y_proba: "y_proba.csv"
+  input:
+    y_true: "y_test.csv"
+    y_pred: "y_pred.csv"
+  format:
+    sep: ","
+  split:
+    mode: "directory" # or file
+    dir: "." # or "." for root directory
